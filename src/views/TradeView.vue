@@ -2536,22 +2536,23 @@ const setPaperTradingCredentials = async () => {
 const connectWebSocket = () => {
   let websocketUrl;
 
-  if (selectedBroker.value?.brokerName === 'Flattrade' && brokerStatus.value === 'Connected') {
-    websocketUrl = 'ws://localhost:8765';
-  } else if (selectedBroker.value?.brokerName === 'Shoonya' && brokerStatus.value === 'Connected') {
-    websocketUrl = 'ws://localhost:8766';
-  } else if (selectedBroker.value?.brokerName === 'PaperTrading' && brokerStatus.value === 'Connected') {
-    // Get the selected broker for paper trading
-    const selectedPaperBroker = JSON.parse(localStorage.getItem('selectedBrokerForPaper') || '{}');
-    if (selectedPaperBroker.brokerName === 'Flattrade') {
-      websocketUrl = 'ws://localhost:8765';
-    } else if (selectedPaperBroker.brokerName === 'Shoonya') {
-      websocketUrl = 'ws://localhost:8766';
-    } else {
-      console.error('Invalid broker selected for paper trading');
-      return;
-    }
-  }
+  // if (selectedBroker.value?.brokerName === 'Flattrade' && brokerStatus.value === 'Connected') {
+  //   websocketUrl = 'ws://localhost:8765';
+  // } else if (selectedBroker.value?.brokerName === 'Shoonya' && brokerStatus.value === 'Connected') {
+  //   websocketUrl = 'ws://localhost:8766';
+  // } else if (selectedBroker.value?.brokerName === 'PaperTrading' && brokerStatus.value === 'Connected') {
+  //   // Get the selected broker for paper trading
+  //   const selectedPaperBroker = JSON.parse(localStorage.getItem('selectedBrokerForPaper') || '{}');
+  //   if (selectedPaperBroker.brokerName === 'Flattrade') {
+  //     websocketUrl = 'ws://localhost:8765';
+  //   } else if (selectedPaperBroker.brokerName === 'Shoonya') {
+  //     websocketUrl = 'ws://localhost:8766';
+  //   } else {
+  //     console.error('Invalid broker selected for paper trading');
+  //     return;
+  //   }
+  // }
+  websocketUrl = 'ws://localhost:8765';
 
   console.log(`Connecting to WebSocket at ${websocketUrl}`);
   socket.value = new WebSocket(websocketUrl);
