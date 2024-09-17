@@ -52,6 +52,12 @@
   <div class="col-6 col-md-4 col-lg-3 text-center">
     <p class="mb-1"><b>Total Funds</b></p>
     <p class="mt-2 mb-0">
+      <span
+        id="showAdaptabilityGuideBtn"
+        data-bs-toggle="modal"
+        data-bs-target="#adaptabilityEnforcingGuideModal"
+        >ℹ️</span
+      >
       ₹ {{ availableBalance !== null ? availableBalance.toLocaleString('en-IN', {
       maximumFractionDigits: 0 }) : 'N/A' }}
     </p>
@@ -328,101 +334,84 @@
           <div class="input-group">
             <select
               id="OrderType"
-              class="form-select"
+              class="form-select w-75"
               aria-label="OrderType"
               v-model="selectedOrderType"
               :class="{ 'disabled-form': isFormDisabled }"
               @change="handleOrderTypeChange"
             >
               <option
-                v-for="(type, index) in displayOrderTypes"
-                :key="index"
+                v-for="(displayType, index) in displayOrderTypes"
+                :key="orderTypes[index]"
                 :value="orderTypes[index]"
               >
-                {{ type }}
+                {{ displayType }}
               </option>
             </select>
+            <!-- Offset input (only visible for 'Limit at Offset' order type) -->
+            <span class="input-group-text flex-shrink w-25 p-0 ps-2" v-if="isOffsetOrderType">
+              <input
+                type="number"
+                id="LimitOffset"
+                class="form-control border-0 p-1"
+                min="-9"
+                max="9"
+                v-model="limitOffset"
+                @input="handleOrderTypeChange"
+                :class="{ 'disabled-form': isFormDisabled }"
+              />
+            </span>
           </div>
         </div>
-        <!-- Total Risk and Target by Capital Or Amount -->
+
+        <!-- Predefined Stoploss -->
         <div class="col-6 col-md-3 col-lg-3">
-          <label for="totalRiskTargetType" class="form-label mb-0">
-            Risk | Target Type
-            <span class="badge" :class="totalRiskTargetToggle ? 'bg-success' : 'bg-danger'">
-              {{ totalRiskTargetToggle ? 'Enabled' : 'Disabled' }}
-            </span>
-          </label>
-          <div class="input-group">
+          <label for="enableStoploss" class="form-label mb-0">Predefined Stoploss</label>
+          <div class="input-group mb-3">
             <div class="input-group-text">
               <input
                 class="form-check-input mt-0"
                 type="checkbox"
-                id="totalRiskTargetToggle"
-                v-model="totalRiskTargetToggle"
+                id="enableStoploss"
+                aria-label="Enable Predefined Stoploss"
+                v-model="enableStoploss"
+                :class="{ 'disabled-form': isFormDisabled }"
               />
             </div>
-            <select class="form-select" v-model="totalRiskTargetType">
-              <option value="percentage">Percentage</option>
-              <option value="amount">Amount</option>
-            </select>
+            <input
+              type="number"
+              class="form-control"
+              id="stoplossValue"
+              aria-label="Predefined Stoploss (points)"
+              v-model="stoplossValue"
+              :class="{ 'disabled-form': isFormDisabled }"
+            />
+            <span class="input-group-text">₹ Points</span>
           </div>
         </div>
+        <!-- Predefined Target -->
         <div class="col-6 col-md-3 col-lg-3">
-          <!-- Risk Input -->
-          <label for="totalRiskAmount" class="form-label mb-0">Max Risk</label>
-          <div class="input-group">
-            <span class="input-group-text">Loss</span>
-            <template v-if="totalRiskTargetType === 'amount'">
+          <label for="enableTarget" class="form-label mb-0">Predefined Target</label>
+          <div class="input-group mb-3">
+            <div class="input-group-text">
               <input
-                type="number"
-                min="100"
-                class="form-control"
-                v-model="totalRiskAmount"
-                placeholder="Enter risk amount"
+                class="form-check-input mt-0"
+                type="checkbox"
+                id="enableTarget"
+                aria-label="Enable Predefined Target"
+                v-model="enableTarget"
+                :class="{ 'disabled-form': isFormDisabled }"
               />
-              <span class="input-group-text">₹</span>
-            </template>
-            <template v-if="totalRiskTargetType === 'percentage'">
-              <input
-                type="number"
-                min="0.1"
-                max="5"
-                step="0.1"
-                class="form-control"
-                v-model="totalRiskPercentage"
-                placeholder="Enter risk percentage"
-              />
-              <span class="input-group-text">%</span>
-            </template>
-          </div>
-        </div>
-        <div class="col-6 col-md-3 col-lg-3">
-          <!-- Target Input -->
-          <label for="totalTargetAmount" class="form-label mb-0">Max Target</label>
-          <div class="input-group">
-            <span class="input-group-text">Profit</span>
-            <template v-if="totalRiskTargetType === 'amount'">
-              <input
-                type="number"
-                min="100"
-                class="form-control"
-                v-model="totalTargetAmount"
-                placeholder="Enter target amount"
-              />
-              <span class="input-group-text">₹</span>
-            </template>
-            <template v-if="totalRiskTargetType === 'percentage'">
-              <input
-                type="number"
-                min="0.1"
-                max="5"
-                step="0.1"
-                class="form-control"
-                v-model="totalTargetPercentage"
-                placeholder="Enter target %"
-              />
-              <span class="input-group-text">%</span>
-            </template>
+            </div>
+            <input
+              type="number"
+              class="form-control"
+              id="targetValue"
+              aria-label="Predefined Target (points)"
+              v-model="targetValue"
+              :class="{ 'disabled-form': isFormDisabled }"
+            />
+            <span class="input-group-text">₹ Points</span>
           </div>
         </div>
       </div>
@@ -455,6 +444,10 @@
             }"
               >{{ latestCallLTP }}
             </span>
+          </div>
+          <div class="mt-1">
+            <span v-if="orderMargin.call !== null">Margin Required: ₹{{ orderMargin.call }}</span>
+            <span v-else>Margin: Not available</span>
           </div>
           <div v-if="showStrikeDetails">
             <div class="mt-2">{{ selectedCallStrike.tradingSymbol }}</div>
@@ -594,6 +587,10 @@
               </option>
             </select>
           </div>
+          <div class="mt-1">
+            <span v-if="orderMargin.put !== null">Margin Required: ₹{{ orderMargin.put }}</span>
+            <span v-else>Margin: Not available</span>
+          </div>
           <div v-if="showStrikeDetails">
             <div class="mt-2">{{ selectedPutStrike.tradingSymbol }}</div>
             <div class="text-muted">Security ID: {{ selectedPutStrike.securityId }}</div>
@@ -647,8 +644,8 @@
 
       <div class="row align-items-center justify-content-between mt-3">
         <!-- Call Strike Buy/Sell Buttons -->
-        <div class="col-12 col-md-4 col-lg-3">
-          <div class="btn-group w-100">
+        <div class="order-1 order-md-1 order-lg-1 col-6 col-md-4 col-lg-4">
+          <div class="btn-group col-12 col-md-10 col-lg-10">
             <button
               type="button"
               class="btn btn-sm btn-success fs-5 my-2 w-75"
@@ -684,7 +681,7 @@
               </li>
             </ul>
           </div>
-          <div class="btn-group w-100">
+          <div class="btn-group col-12 col-md-10 col-lg-10">
             <button
               type="button"
               class="btn btn-sm btn-danger fs-5 w-75"
@@ -722,32 +719,40 @@
         </div>
 
         <!-- Close & Cancel Buttons -->
-        <div class="col-12 col-md-4 col-lg-6 text-center">
-          <button
-            v-if="selectedShoonyaPositionsSet.size === 0 && selectedFlattradePositionsSet.size === 0"
-            class="btn btn-sm btn-outline fs-5 w-75 my-2"
-            @click="closeAllPositions"
-          >
-            <span v-if="enableHotKeys">F6 / </span>
-            Close All
-          </button>
-          <button
-            v-if="selectedShoonyaPositionsSet.size > 0 || selectedFlattradePositionsSet.size > 0"
-            class="btn btn-sm btn-outline fs-5 w-75 my-2"
-            @click="closeSelectedPositions"
-          >
-            <span v-if="enableHotKeys">F6 / </span>
-            Close Selected
-          </button>
-          <button class="btn btn-sm btn-outline fs-5 w-75" @click="cancelPendingOrders">
-            <span v-if="enableHotKeys">F7 / </span>
-            Cancel Orders
-          </button>
+        <div class="order-3 order-md-2 order-lg-2 col-12 col-md-4 col-lg-4 text-center">
+          <div class="row mt-2">
+            <div class="col-6 col-md-12 col-lg-12">
+              <button
+                v-if="selectedShoonyaPositionsSet.size === 0 && selectedFlattradePositionsSet.size === 0"
+                class="btn btn-sm btn-outline fs-5 col-12 col-md-11 col-lg-10"
+                @click="closeAllPositions"
+              >
+                <span v-if="enableHotKeys">F6 / </span>
+                Close All
+              </button>
+              <button
+                v-if="selectedShoonyaPositionsSet.size > 0 || selectedFlattradePositionsSet.size > 0"
+                class="btn btn-sm btn-outline fs-5 col-12 col-md-11 col-lg-10"
+                @click="closeSelectedPositions"
+              >
+                <span v-if="enableHotKeys">F6 / </span>
+                Close Selected
+              </button>
+            </div>
+            <div class="col-6 col-md-12 col-lg-12">
+              <button
+                class="btn btn-sm btn-outline fs-5 col-12 col-md-11 col-lg-10 mt-md-2 mt-lg-2"
+                @click="cancelPendingOrders"
+              >
+                <span v-if="enableHotKeys">F7 / </span>
+                Cancel Orders
+              </button>
+            </div>
+          </div>
         </div>
-
         <!-- Put Strike Buy/Sell Buttons -->
-        <div class="col-12 col-md-4 col-lg-3">
-          <div class="btn-group w-100">
+        <div class="order-2 order-md-3 order-lg-3 col-6 col-md-4 col-lg-4 text-end">
+          <div class="btn-group col-12 col-md-10 col-lg-10">
             <button
               type="button"
               class="btn btn-sm btn-success fs-5 my-2 w-75"
@@ -783,7 +788,7 @@
               </li>
             </ul>
           </div>
-          <div class="btn-group w-100">
+          <div class="btn-group col-12 col-md-10 col-lg-10">
             <button
               type="button"
               class="btn btn-sm btn-danger fs-5 w-75"
@@ -944,8 +949,8 @@
                 <th scope="col">Position</th>
                 <th scope="col">Avg</th>
                 <th scope="col">LTP</th>
-                <th scope="col">Buy Value</th>
-                <th scope="col">Sell Value</th>
+                <th scope="col">TSL / SL</th>
+                <th scope="col">Target</th>
                 <th scope="col">Realized</th>
                 <th scope="col">Unrealized</th>
                 <th scope="col">Select</th>
@@ -956,7 +961,6 @@
                 <tr v-for="flattradePosition in sortedPositions" :key="flattradePosition.tsym">
                   <td>
                     <div class="d-flex">{{ flattradePosition.tsym }}</div>
-
                     <div class="d-flex flex-row">
                       <span
                         :class="flattradePosition.netqty > 0 ? 'text-success' : flattradePosition.netqty < 0 ? 'text-danger' : null"
@@ -972,11 +976,113 @@
                       </span>
                       <span class="ms-2"> Type: {{ flattradePosition.prd }} </span>
                     </div>
+                    <div class="mt-1 d-flex flex-row">
+                      <span class="text-success">₹{{ flattradePosition.daybuyamt }}</span>
+                      <span class="ms-2 text-danger">₹{{ flattradePosition.daysellamt }}</span>
+                    </div>
                   </td>
                   <td>{{ flattradePosition.netavgprc }}</td>
                   <td>{{ positionLTPs[flattradePosition.tsym] || '-' }}</td>
-                  <td>{{ flattradePosition.daybuyamt }}</td>
-                  <td>{{ flattradePosition.daysellamt }}</td>
+                  <td>
+                    <!-- SL & TSL -->
+                    <div class="row">
+                      <div
+                        class="col-12"
+                        v-if="trailingStoplosses[flattradePosition.tsym] !== null"
+                      >
+                        <div class="d-flex align-items-center">
+                          <span class="me-2">TSL:</span>
+                          <span class="bg-danger text-white px-2 py-1 rounded">
+                            {{ trailingStoplosses[flattradePosition.tsym] }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="col-12" v-else-if="stoplosses[flattradePosition.tsym] !== null">
+                        <div class="btn-group" role="group">
+                          <button
+                            class="btn btn-sm btn-outline-danger"
+                            @click="decreaseStoploss(flattradePosition)"
+                          >
+                            - SL
+                          </button>
+                          <span class="d-flex align-items-center bg-danger text-white px-2">
+                            {{ stoplosses[flattradePosition.tsym] }}
+                          </span>
+                          <button
+                            class="btn btn-sm btn-outline-success"
+                            @click="increaseStoploss(flattradePosition)"
+                          >
+                            + SL
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else>No SL set</div>
+                    </div>
+                    <div class="btn-group mt-2" role="group">
+                      <button
+                        v-if="trailingStoplosses[flattradePosition.tsym] === null && stoplosses[flattradePosition.tsym] === null"
+                        class="btn btn-sm btn-outline"
+                        @click="setStoploss(flattradePosition, 'trailing')"
+                      >
+                        Set TSL
+                      </button>
+                      <button
+                        v-if="trailingStoplosses[flattradePosition.tsym] === null && stoplosses[flattradePosition.tsym] === null"
+                        class="btn btn-sm btn-outline"
+                        @click="setStoploss(flattradePosition, 'static')"
+                      >
+                        Set SL
+                      </button>
+                      <button
+                        v-if="trailingStoplosses[flattradePosition.tsym] !== null || stoplosses[flattradePosition.tsym] !== null"
+                        class="btn btn-sm btn-outline-danger"
+                        @click="removeStoploss(flattradePosition)"
+                      >
+                        Remove SL
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <!-- TG -->
+                    <div class="row">
+                      <div class="col-12" v-if="targets[flattradePosition.tsym] !== null">
+                        <div class="btn-group" role="group">
+                          <button
+                            class="btn btn-sm btn-outline-danger"
+                            @click="decreaseTarget(flattradePosition)"
+                          >
+                            - TG
+                          </button>
+                          <span class="d-flex align-items-center bg-success text-white px-2">
+                            {{ targets[flattradePosition.tsym] }}
+                          </span>
+                          <button
+                            class="btn btn-sm btn-outline-success"
+                            @click="increaseTarget(flattradePosition)"
+                          >
+                            + TG
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else>No Target set</div>
+                    </div>
+                    <div class="btn-group mt-2" role="group">
+                      <button
+                        v-if="targets[flattradePosition.tsym] === null"
+                        class="btn btn-sm btn-outline-success"
+                        @click="setTarget(flattradePosition)"
+                      >
+                        Set TG
+                      </button>
+                      <button
+                        v-if="targets[flattradePosition.tsym] !== null"
+                        class="btn btn-sm btn-outline-danger"
+                        @click="removeTarget(flattradePosition)"
+                      >
+                        Remove TG
+                      </button>
+                    </div>
+                  </td>
                   <td
                     :class="flattradePosition.rpnl > 0 ? 'text-success' : flattradePosition.rpnl < 0 ? 'text-danger' : null"
                   >
@@ -1018,8 +1124,8 @@
                 <th scope="col">Position</th>
                 <th scope="col">Avg</th>
                 <th scope="col">LTP</th>
-                <th scope="col">Buy Value</th>
-                <th scope="col">Sell Value</th>
+                <th scope="col">TSL / SL</th>
+                <th scope="col">Target</th>
                 <th scope="col">Realized</th>
                 <th scope="col">Unrealized</th>
                 <th scope="col">Select</th>
@@ -1045,11 +1151,110 @@
                       </span>
                       <span class="ms-2"> Type: {{ shoonyaPosition.prd }} </span>
                     </div>
+                    <div class="mt-1 d-flex flex-row">
+                      <span class="text-success">₹{{ shoonyaPosition.daybuyamt }}</span>
+                      <span class="ms-2 text-danger">₹{{ shoonyaPosition.daysellamt }}</span>
+                    </div>
                   </td>
                   <td>{{ shoonyaPosition.netavgprc }}</td>
                   <td>{{ positionLTPs[shoonyaPosition.tsym] || '-' }}</td>
-                  <td>{{ shoonyaPosition.daybuyamt }}</td>
-                  <td>{{ shoonyaPosition.daysellamt }}</td>
+                  <td>
+                    <!-- SL & TSL -->
+                    <div class="row">
+                      <div class="col-12" v-if="trailingStoplosses[shoonyaPosition.tsym] !== null">
+                        <div class="d-flex align-items-center">
+                          <span class="me-2">TSL:</span>
+                          <span class="bg-danger text-white px-2 py-1 rounded">
+                            {{ trailingStoplosses[shoonyaPosition.tsym] }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="col-12" v-else-if="stoplosses[shoonyaPosition.tsym] !== null">
+                        <div class="btn-group" role="group">
+                          <button
+                            class="btn btn-sm btn-outline-danger"
+                            @click="decreaseStoploss(shoonyaPosition)"
+                          >
+                            - SL
+                          </button>
+                          <span class="d-flex align-items-center bg-danger text-white px-2">
+                            {{ stoplosses[shoonyaPosition.tsym] }}
+                          </span>
+                          <button
+                            class="btn btn-sm btn-outline-success"
+                            @click="increaseStoploss(shoonyaPosition)"
+                          >
+                            + SL
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else>No SL set</div>
+                    </div>
+                    <div class="btn-group mt-2" role="group">
+                      <button
+                        v-if="trailingStoplosses[shoonyaPosition.tsym] === null && stoplosses[shoonyaPosition.tsym] === null"
+                        class="btn btn-sm btn-outline"
+                        @click="setStoploss(shoonyaPosition, 'trailing')"
+                      >
+                        Set TSL
+                      </button>
+                      <button
+                        v-if="trailingStoplosses[shoonyaPosition.tsym] === null && stoplosses[shoonyaPosition.tsym] === null"
+                        class="btn btn-sm btn-outline"
+                        @click="setStoploss(shoonyaPosition, 'static')"
+                      >
+                        Set SL
+                      </button>
+                      <button
+                        v-if="trailingStoplosses[shoonyaPosition.tsym] !== null || stoplosses[shoonyaPosition.tsym] !== null"
+                        class="btn btn-sm btn-outline-danger"
+                        @click="removeStoploss(shoonyaPosition)"
+                      >
+                        Remove SL
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <!-- TG -->
+                    <div class="row">
+                      <div class="col-12" v-if="targets[shoonyaPosition.tsym] !== null">
+                        <div class="btn-group" role="group">
+                          <button
+                            class="btn btn-sm btn-outline-danger"
+                            @click="decreaseTarget(shoonyaPosition)"
+                          >
+                            - TG
+                          </button>
+                          <span class="d-flex align-items-center bg-success text-white px-2">
+                            {{ targets[shoonyaPosition.tsym] }}
+                          </span>
+                          <button
+                            class="btn btn-sm btn-outline-success"
+                            @click="increaseTarget(shoonyaPosition)"
+                          >
+                            + TG
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else>No Target set</div>
+                    </div>
+                    <div class="btn-group mt-2" role="group">
+                      <button
+                        v-if="targets[shoonyaPosition.tsym] === null"
+                        class="btn btn-sm btn-outline-success"
+                        @click="setTarget(shoonyaPosition)"
+                      >
+                        Set TG
+                      </button>
+                      <button
+                        v-if="targets[shoonyaPosition.tsym] !== null"
+                        class="btn btn-sm btn-outline-danger"
+                        @click="removeTarget(shoonyaPosition)"
+                      >
+                        Remove TG
+                      </button>
+                    </div>
+                  </td>
                   <td
                     :class="shoonyaPosition.rpnl > 0 ? 'text-success' : shoonyaPosition.rpnl < 0 ? 'text-danger' : null"
                   >
@@ -1435,46 +1640,64 @@
         tabindex="0"
       >
         <div class="row py-3">
-          <div class="col-12 col-md-6 col-lg-4">
-            <!-- Select Call Strike Offset -->
-            <label for="callStrikeOffset" class="form-label">Call Strike Offset</label>
-            <select name="" id="callStrikeOffset" class="form-select" v-model="callStrikeOffset">
-              <option value="+4">ITM +4</option>
-              <option value="+3">ITM +3</option>
-              <option value="+2">ITM +2</option>
-              <option value="+1">ITM +1</option>
-              <option value="0">ATM 0</option>
-              <option value="-1">OTM -1</option>
-              <option value="-2">OTM -2</option>
-              <option value="-3">OTM -3</option>
-              <option value="-4">OTM -4</option>
-            </select>
+          <div class="row m-0">
+            <div class="col-12 border rounded p-3">
+              <h6 class="mb-0">Offset Settings</h6>
+              <div class="row">
+                <!-- Select Call Strike Offset -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="callStrikeOffset" class="form-label">Call Strike Offset</label>
+                  <select
+                    name=""
+                    id="callStrikeOffset"
+                    class="form-select"
+                    v-model="callStrikeOffset"
+                  >
+                    <option value="+4">ITM +4</option>
+                    <option value="+3">ITM +3</option>
+                    <option value="+2">ITM +2</option>
+                    <option value="+1">ITM +1</option>
+                    <option value="0">ATM 0</option>
+                    <option value="-1">OTM -1</option>
+                    <option value="-2">OTM -2</option>
+                    <option value="-3">OTM -3</option>
+                    <option value="-4">OTM -4</option>
+                  </select>
+                </div>
+                <!-- Select Put Strike Offset -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="putStrikeOffset" class="form-label">Put Strike Offset</label>
+                  <select
+                    name=""
+                    id="putStrikeOffset"
+                    class="form-select"
+                    v-model="putStrikeOffset"
+                  >
+                    <option value="+4">ITM +4</option>
+                    <option value="+3">ITM +3</option>
+                    <option value="+2">ITM +2</option>
+                    <option value="+1">ITM +1</option>
+                    <option value="0">ATM 0</option>
+                    <option value="-1">OTM -1</option>
+                    <option value="-2">OTM -2</option>
+                    <option value="-3">OTM -3</option>
+                    <option value="-4">OTM -4</option>
+                  </select>
+                </div>
+                <!-- Select Expiry Offset -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="expiryOffset" class="form-label">Expiry Offset</label>
+                  <select id="expiryOffset" class="form-select" v-model="expiryOffset">
+                    <option value="0">Current Expiry</option>
+                    <option value="1">+1 Expiry</option>
+                    <option value="2">+2 Expiry</option>
+                    <option value="3">+3 Expiry</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="col-12 col-md-6 col-lg-4">
-            <!-- Select Put Strike Offset -->
-            <label for="putStrikeOffset" class="form-label">Put Strike Offset</label>
-            <select name="" id="putStrikeOffset" class="form-select" v-model="putStrikeOffset">
-              <option value="+4">ITM +4</option>
-              <option value="+3">ITM +3</option>
-              <option value="+2">ITM +2</option>
-              <option value="+1">ITM +1</option>
-              <option value="0">ATM 0</option>
-              <option value="-1">OTM -1</option>
-              <option value="-2">OTM -2</option>
-              <option value="-3">OTM -3</option>
-              <option value="-4">OTM -4</option>
-            </select>
-          </div>
-          <!-- Select Expiry Offset -->
-          <div class="col-12 col-md-6 col-lg-4">
-            <label for="expiryOffset" class="form-label">Expiry Offset</label>
-            <select id="expiryOffset" class="form-select" v-model="expiryOffset">
-              <option value="0">Current Expiry</option>
-              <option value="1">+1 Expiry</option>
-              <option value="2">+2 Expiry</option>
-              <option value="3">+3 Expiry</option>
-            </select>
-          </div>
+
           <!-- Show all positions Including Equity and Futures and Options -->
           <!-- <div class="col-12 col-md-6 col-lg-4">
             <label for="showAllPositions" class="form-label">Show Positions</label>
@@ -1485,227 +1708,338 @@
               <option value="equity">Equity Only</option>
             </select>
           </div> -->
-          <!-- Show/Hide LTP Range Bar Toggle -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <!-- Show LTP Range Bar -->
-            <label for="showLTPRangeBar" class="form-label">Show LTP Range Bar</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="showLTPRangeBar"
-                v-model="showLTPRangeBar"
-              />
-              <label class="form-check-label" for="showLTPRangeBar">
-                {{ showLTPRangeBar ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-          </div>
-          <!-- 1 Click Keys -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <form @submit.prevent>
-              <fieldset :disabled="isFormDisabled" :class="{ 'disabled-form': isFormDisabled }">
-                <label for="enableHotKeys" class="form-label">1 Click Keys ⌨️</label>
-                <div class="form-check form-switch">
-                  <input
-                    class="form-check-input"
-                    type="checkbox"
-                    id="enableHotKeys"
-                    v-model="enableHotKeys"
-                    :class="{ 'disabled-form': isFormDisabled }"
-                  />
-                  <label class="form-check-label" for="enableHotKeys">
-                    {{ enableHotKeys ? 'Enabled' : 'Disabled' }}
+
+          <!-- Risk Management Settings -->
+          <div class="row m-0 mt-3">
+            <div class="col-12 border rounded p-3">
+              <h6 class="mb-0">Risk Management Settings</h6>
+              <div class="row">
+                <!-- Overtrade Protection (Auto-Kill Switch) -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="overtradeProtection" class="form-label">
+                    Overtrade Protection (Auto-Kill Switch)
                   </label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="overtradeProtection"
+                      :checked="overtradeProtection"
+                      @change="toggleOvertradeProtection"
+                    />
+                    <label class="form-check-label" for="overtradeProtection">
+                      {{ overtradeProtection ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                  <small class="text-muted">
+                    Activates Kill Switch if your total Buy or Sell value exceeds your available
+                    funds, preventing overtrading.
+                  </small>
                 </div>
-              </fieldset>
-            </form>
-          </div>
-          <!-- Show/Hide OHLC Values -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="showOHLCValues" class="form-label">Show OHLC Values</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="showOHLCValues"
-                v-model="showOHLCValues"
-              />
-              <label class="form-check-label" for="showOHLCValues">
-                {{ showOHLCValues ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-            <small class="text-muted">Reload Required</small>
-          </div>
-          <!-- Show/Hide Strike Details - Security ID, Trading Symbol -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="showStrikeDetails" class="form-label">Show Strike Details</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="showStrikeDetails"
-                v-model="showStrikeDetails"
-              />
-              <label class="form-check-label" for="showStrikeDetails">
-                {{ showStrikeDetails ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-            <small class="text-muted">For development purposes only</small>
-          </div>
-          <!-- Subscibe LTP for 3 more additional symbols -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="additionalSymbols" class="form-label">Additional Symbols</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="additionalSymbols"
-                :checked="additionalSymbols"
-                @change="toggleAdditionalSymbols"
-              />
-              <label class="form-check-label" for="additionalSymbols">
-                {{ additionalSymbols ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-          </div>
-          <!-- Notification Sound -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="notificationSound" class="form-label">Notification Sound</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="notificationSound"
-                v-model="notificationSound"
-                @change="playNotificationSound"
-              />
-              <label class="form-check-label" for="notificationSound">
-                {{ notificationSound ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-            <select v-model="selectedSound" class="form-select mt-2" :disabled="!notificationSound">
-              <option value="cyberpunk-notification.mp3">Cyberpunk</option>
-              <option value="long-pop.wav">Long Pop</option>
-              <option value="classical.mp3">Classical</option>
-              <!-- Add more sound options as needed -->
-            </select>
-          </div>
-          <!-- Close Positions if Risk is reached -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="closePositionsRisk" class="form-label">If Max Risk is reached</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="closePositionsRisk"
-                v-model="closePositionsRisk"
-              />
-              <label class="form-check-label" for="closePositionsRisk">
-                {{ closePositionsRisk ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-            <div v-if="closePositionsRisk" class="mt-2">
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="radio"
-                  id="riskActionClose"
-                  value="close"
-                  v-model="riskAction"
-                />
-                <label class="form-check-label" for="riskActionClose">Close Positions</label>
+                <!-- Max Risk & Target Toggle -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="" class="form-label mt-2">Max Risk & Target</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="totalRiskTargetToggle"
+                      v-model="totalRiskTargetToggle"
+                    />
+                    <label class="form-check-label" for="totalRiskTargetToggle">
+                      {{ totalRiskTargetToggle ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                </div>
+                <!-- Total Risk and Target by Capital Or Amount -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="totalRiskTargetType" class="form-label mb-0">
+                    Risk | Target Type
+                  </label>
+                  <select class="form-select" v-model="totalRiskTargetType">
+                    <option value="percentage">Percentage</option>
+                    <option value="amount">Amount</option>
+                  </select>
+                </div>
+                <!-- Risk Input -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="totalRiskAmount" class="form-label mb-0">Max Risk</label>
+                  <div class="input-group">
+                    <span class="input-group-text">Loss</span>
+                    <template v-if="totalRiskTargetType === 'amount'">
+                      <input
+                        type="number"
+                        min="100"
+                        class="form-control"
+                        v-model="totalRiskAmount"
+                        placeholder="Enter risk amount"
+                      />
+                      <span class="input-group-text">₹</span>
+                    </template>
+                    <template v-if="totalRiskTargetType === 'percentage'">
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="5"
+                        step="0.1"
+                        class="form-control"
+                        v-model="totalRiskPercentage"
+                        placeholder="Enter risk percentage"
+                      />
+                      <span class="input-group-text">%</span>
+                    </template>
+                  </div>
+                  <!-- Close Positions if Risk is reached -->
+                  <label for="closePositionsRisk" class="form-label mt-2"
+                    >Action if Max Risk is reached</label
+                  >
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="closePositionsRisk"
+                      v-model="closePositionsRisk"
+                    />
+                    <label class="form-check-label" for="closePositionsRisk">
+                      {{ closePositionsRisk ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                  <div v-if="closePositionsRisk" class="mt-2">
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        id="riskActionClose"
+                        value="close"
+                        v-model="riskAction"
+                      />
+                      <label class="form-check-label" for="riskActionClose">Close Positions</label>
+                    </div>
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        id="riskActionKillSwitch"
+                        value="killSwitch"
+                        v-model="riskAction"
+                      />
+                      <label class="form-check-label" for="riskActionKillSwitch"
+                        >Activate Kill Switch</label
+                      >
+                    </div>
+                  </div>
+                </div>
+                <!-- Target Input -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="totalTargetAmount" class="form-label mb-0">Max Target</label>
+                  <div class="input-group">
+                    <span class="input-group-text">Profit</span>
+                    <template v-if="totalRiskTargetType === 'amount'">
+                      <input
+                        type="number"
+                        min="100"
+                        class="form-control"
+                        v-model="totalTargetAmount"
+                        placeholder="Enter target amount"
+                      />
+                      <span class="input-group-text">₹</span>
+                    </template>
+                    <template v-if="totalRiskTargetType === 'percentage'">
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="5"
+                        step="0.1"
+                        class="form-control"
+                        v-model="totalTargetPercentage"
+                        placeholder="Enter target %"
+                      />
+                      <span class="input-group-text">%</span>
+                    </template>
+                  </div>
+                  <!-- Close Positions if Target is reached -->
+                  <label for="closePositionsTarget" class="form-label mt-2"
+                    >Action if Max Target is reached</label
+                  >
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="closePositionsTarget"
+                      v-model="closePositionsTarget"
+                    />
+                    <label class="form-check-label" for="closePositionsTarget">
+                      {{ closePositionsTarget ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                  <div v-if="closePositionsTarget" class="mt-2">
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        id="targetActionClose"
+                        value="close"
+                        v-model="targetAction"
+                      />
+                      <label class="form-check-label" for="targetActionClose"
+                        >Close Positions</label
+                      >
+                    </div>
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        id="targetActionKillSwitch"
+                        value="killSwitch"
+                        v-model="targetAction"
+                      />
+                      <label class="form-check-label" for="targetActionKillSwitch"
+                        >Activate Kill Switch</label
+                      >
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="radio"
-                  id="riskActionKillSwitch"
-                  value="killSwitch"
-                  v-model="riskAction"
-                />
-                <label class="form-check-label" for="riskActionKillSwitch"
-                  >Activate Kill Switch</label
-                >
+            </div>
+          </div>
+
+          <!-- App Settings -->
+          <div class="row m-0 mt-3">
+            <div class="col-12 rounded border p-3">
+              <h6 class="mb-0">App Settings</h6>
+              <div class="row">
+                <!-- Show/Hide LTP Range Bar Toggle -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <!-- Show LTP Range Bar -->
+                  <label for="showLTPRangeBar" class="form-label">Show LTP Range Bar</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="showLTPRangeBar"
+                      v-model="showLTPRangeBar"
+                    />
+                    <label class="form-check-label" for="showLTPRangeBar">
+                      {{ showLTPRangeBar ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                </div>
+                <!-- 1 Click Keys -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <form @submit.prevent>
+                    <fieldset
+                      :disabled="isFormDisabled"
+                      :class="{ 'disabled-form': isFormDisabled }"
+                    >
+                      <label for="enableHotKeys" class="form-label">1 Click Keys ⌨️</label>
+                      <div class="form-check form-switch">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          id="enableHotKeys"
+                          v-model="enableHotKeys"
+                          :class="{ 'disabled-form': isFormDisabled }"
+                        />
+                        <label class="form-check-label" for="enableHotKeys">
+                          {{ enableHotKeys ? 'Enabled' : 'Disabled' }}
+                        </label>
+                      </div>
+                    </fieldset>
+                  </form>
+                </div>
+                <!-- Show/Hide OHLC Values -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="showOHLCValues" class="form-label">Show OHLC Values</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="showOHLCValues"
+                      v-model="showOHLCValues"
+                    />
+                    <label class="form-check-label" for="showOHLCValues">
+                      {{ showOHLCValues ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                  <small class="text-muted">Reload Required</small>
+                </div>
+                <!-- Show/Hide Strike Details - Security ID, Trading Symbol -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="showStrikeDetails" class="form-label">Show Strike Details</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="showStrikeDetails"
+                      v-model="showStrikeDetails"
+                    />
+                    <label class="form-check-label" for="showStrikeDetails">
+                      {{ showStrikeDetails ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                  <small class="text-muted">For development purposes only</small>
+                </div>
+                <!-- Subscibe LTP for 3 more additional symbols -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="additionalSymbols" class="form-label">Additional Symbols</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="additionalSymbols"
+                      :checked="additionalSymbols"
+                      @change="toggleAdditionalSymbols"
+                    />
+                    <label class="form-check-label" for="additionalSymbols">
+                      {{ additionalSymbols ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                </div>
+                <!-- Notification Sound -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="notificationSound" class="form-label">Notification Sound</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="notificationSound"
+                      v-model="notificationSound"
+                      @change="playNotificationSound"
+                    />
+                    <label class="form-check-label" for="notificationSound">
+                      {{ notificationSound ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                  <select
+                    v-model="selectedSound"
+                    class="form-select mt-2"
+                    :disabled="!notificationSound"
+                  >
+                    <option value="cyberpunk-notification.mp3">Cyberpunk</option>
+                    <option value="long-pop.wav">Long Pop</option>
+                    <option value="classical.mp3">Classical</option>
+                    <!-- Add more sound options as needed -->
+                  </select>
+                </div>
+                <!-- Enable / Disable Experimental Features -->
+                <div class="col-12 col-md-6 col-lg-4 mt-3">
+                  <label for="experimentalFeatures" class="form-label">Experimental Features</label>
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="experimentalFeatures"
+                      v-model="experimentalFeatures"
+                    />
+                    <label class="form-check-label" for="experimentalFeatures">
+                      {{ experimentalFeatures ? 'Enabled' : 'Disabled' }}
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <!-- Close Positions if Target is reached -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="closePositionsTarget" class="form-label">If Max Target is reached</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="closePositionsTarget"
-                v-model="closePositionsTarget"
-              />
-              <label class="form-check-label" for="closePositionsTarget">
-                {{ closePositionsTarget ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-            <div v-if="closePositionsTarget" class="mt-2">
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="radio"
-                  id="targetActionClose"
-                  value="close"
-                  v-model="targetAction"
-                />
-                <label class="form-check-label" for="targetActionClose">Close Positions</label>
-              </div>
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="radio"
-                  id="targetActionKillSwitch"
-                  value="killSwitch"
-                  v-model="targetAction"
-                />
-                <label class="form-check-label" for="targetActionKillSwitch"
-                  >Activate Kill Switch</label
-                >
-              </div>
-            </div>
-          </div>
-          <!-- Overtrade Protection (Auto-Kill Switch) -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="overtradeProtection" class="form-label">
-              Overtrade Protection (Auto-Kill Switch)
-            </label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="overtradeProtection"
-                :checked="overtradeProtection"
-                @change="toggleOvertradeProtection"
-              />
-              <label class="form-check-label" for="overtradeProtection">
-                {{ overtradeProtection ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-            <small class="text-muted">
-              Activates Kill Switch if your total Buy or Sell value exceeds your available funds,
-              preventing overtrading.
-            </small>
-          </div>
-          <!-- Enable / Disable Experimental Features -->
-          <div class="col-12 col-md-6 col-lg-4 mt-3">
-            <label for="experimentalFeatures" class="form-label">Experimental Features</label>
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="experimentalFeatures"
-                v-model="experimentalFeatures"
-              />
-              <label class="form-check-label" for="experimentalFeatures">
-                {{ experimentalFeatures ? 'Enabled' : 'Disabled' }}
-              </label>
-            </div>
-          </div>
+
           <div class="col-12 pt-5 text-center">
             <p class="text-secondary">These settings are automatically saved.</p>
           </div>
@@ -1967,6 +2301,109 @@
             allowtransparency="true"
           ></iframe>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Adaptability Enforcing Guide Modal -->
+<div
+  class="modal fade"
+  id="adaptabilityEnforcingGuideModal"
+  tabindex="-1"
+  aria-labelledby="adaptabilityEnforcingGuideModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="adaptabilityEnforcingGuideModalLabel">
+          Adaptability: The Key to Successful Trading
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- <div class="alert alert-warning" role="alert">
+          <strong>Why am I not making money?</strong> The answer is simple: You're not adapting to
+          changing market conditions.
+        </div> -->
+
+        <div class="alert alert-info" role="alert">
+          <strong>Adaptability is the key to success!</strong> It means constantly adjusting your
+          strategy based on current market conditions to survive and thrive in changing markets.
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <div class="card h-100">
+              <div class="card-header bg-primary text-white">
+                <h6 class="mb-0">1. Trending Markets</h6>
+              </div>
+              <div class="card-body">
+                <ul class="list-group list-group-flush">
+                  <li class="list-group-item">Adapt by using directional strategies</li>
+                  <li class="list-group-item">Follow the trend: "The trend is your friend"</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-3">
+            <div class="card h-100">
+              <div class="card-header bg-success text-white">
+                <h6 class="mb-0">2. Low Volatility (Ranging or Sideways Market)</h6>
+              </div>
+              <div class="card-body">
+                <ul class="list-group list-group-flush">
+                  <li class="list-group-item">Adapt by implementing neutral strategies</li>
+                  <li class="list-group-item">Consider Iron Condor or Iron Butterfly strategies</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <div class="card h-100">
+              <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0">3. High Volatility</h6>
+              </div>
+              <div class="card-body">
+                <ul class="list-group list-group-flush">
+                  <li class="list-group-item">Adapt by focusing on scalping techniques</li>
+                  <li class="list-group-item">
+                    Exercise patience and aim for precise entry and exit points
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-3">
+            <div class="card h-100">
+              <div class="card-header bg-danger text-white">
+                <h6 class="mb-0">4. Event Days (High News Impact)</h6>
+              </div>
+              <div class="card-body">
+                <ul class="list-group list-group-flush">
+                  <li class="list-group-item">Adapt by avoiding trading if possible</li>
+                  <li class="list-group-item">Be aware that premiums may rise on both sides</li>
+                  <li class="list-group-item">Exercise extreme caution if you must trade</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 alert alert-success" role="alert">
+          <strong>Remember:</strong> Successful traders are always adapting. If your strategy isn't
+          working, don't stubbornly stick to it. Analyze the market conditions and adjust
+          accordingly.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+          Start Trading with Adaptability
+        </button>
       </div>
     </div>
   </div>

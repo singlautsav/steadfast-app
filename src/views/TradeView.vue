@@ -8,6 +8,8 @@ import ToastAlert from '../components/ToastAlert.vue';
 import qs from 'qs';
 import { debounce } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
+import { useLocalStorage } from '@vueuse/core'; // Optional: for easier localStorage management
+
 
 
 // Reactive Variables
@@ -163,6 +165,21 @@ const strategies = ref([
 ]);
 const riskAction = ref(localStorage.getItem('riskAction') || 'close');
 const targetAction = ref(localStorage.getItem('targetAction') || 'close');
+const orderMargin = reactive({
+  call: null,
+  put: null
+});
+const limitOffset = ref(0);
+const stoplosses = useLocalStorage('stoplosses', {});
+const targets = useLocalStorage('targets', {});
+const trailingStoplosses = useLocalStorage('trailingStoplosses', {});
+
+const enableStoploss = useLocalStorage('enableStoploss', false);
+const stoplossValue = useLocalStorage('stoplossValue', 10);
+const enableTarget = useLocalStorage('enableTarget', false);
+const targetValue = useLocalStorage('targetValue', 50);
+const tslHitPositions = new Set();
+
 
 
 
@@ -311,12 +328,10 @@ const sortedPositions = computed(() => {
   });
 });
 const orderTypes = computed(() => {
-  if (selectedBroker.value?.brokerName === 'Flattrade') {
-    return ['MKT', 'LMT'];
-  } else if (selectedBroker.value?.brokerName === 'Shoonya') {
-    return ['MKT', 'LMT'];
-  } else if (selectedBroker.value?.brokerName === 'PaperTrading') {
-    return ['MKT', 'LMT'];
+  if (selectedBroker.value?.brokerName === 'Flattrade' ||
+    selectedBroker.value?.brokerName === 'Shoonya' ||
+    selectedBroker.value?.brokerName === 'PaperTrading') {
+    return ['MKT', 'LMT', 'LMT_LTP', 'LMT_OFFSET', 'MKT_PROTECTION'];
   }
   return [];
 });
@@ -327,6 +342,12 @@ const displayOrderTypes = computed(() => {
         return 'Market';
       case 'LMT':
         return 'Limit';
+      case 'LMT_LTP':
+        return 'Limit at LTP';
+      case 'LMT_OFFSET':
+        return 'Limit at Offset';
+      case 'MKT_PROTECTION':
+        return 'Market Protection';
       default:
         return type;
     }
@@ -709,8 +730,11 @@ const limitPriceErrorMessage = computed(() => {
   }
   return '';
 });
-
-
+const isOffsetOrderType = computed(() => {
+  const isOffset = selectedOrderType.value === 'LMT_OFFSET';
+  console.log('Is Offset Order Type:', isOffset, 'Selected Order Type:', selectedOrderType.value);
+  return isOffset;
+});
 
 
 
@@ -1067,6 +1091,7 @@ const updateSelectedQuantity = () => {
     lotsPerSymbol.value[selectedMasterSymbol.value] = lots;
     selectedQuantity.value = lots * instrument.lotSize;
     saveLots();
+    getOrderMargin();
   }
 };
 const handleHotKeys = (event) => {
@@ -1461,6 +1486,92 @@ const prepareOrderPayload = (transactionType, drvOptionType, selectedStrike, exc
     };
   } else {
     throw new Error("Unsupported broker");
+  }
+};
+const getOrderMargin = async () => {
+  try {
+    if (!['Flattrade', 'Shoonya'].includes(selectedBroker.value?.brokerName)) {
+      throw new Error('Order margin calculation is only available for Flattrade and Shoonya');
+    }
+
+    const API_TOKEN = localStorage.getItem(`${selectedBroker.value.brokerName.toUpperCase()}_API_TOKEN`);
+    if (!API_TOKEN) {
+      throw new Error(`${selectedBroker.value.brokerName} API Token is missing`);
+    }
+
+    const clientId = selectedBroker.value.clientId;
+    if (!clientId) {
+      throw new Error(`${selectedBroker.value.brokerName} client ID is missing`);
+    }
+
+    const exchangeSegment = getExchangeSegment();
+
+    // Function to get margin for a single strike
+    const getMarginForStrike = async (strike, type) => {
+      let orderData, endpoint;
+
+      if (selectedBroker.value.brokerName === 'Flattrade') {
+        orderData = {
+          uid: clientId,
+          actid: clientId,
+          exch: exchangeSegment,
+          tsym: strike.tradingSymbol,
+          qty: selectedQuantity.value.toString(),
+          prc: selectedOrderType.value === 'LMT' ? limitPrice.value.toString() : "0",
+          prd: selectedProductType.value,
+          trantype: getTransactionType('BUY'),
+          prctyp: selectedOrderType.value,
+        };
+        endpoint = `${BASE_URL}/flattradeGetOrderMargin`;
+      } else if (selectedBroker.value.brokerName === 'Shoonya') {
+        orderData = {
+          uid: clientId,
+          actid: clientId,
+          exch: exchangeSegment,
+          tsym: strike.tradingSymbol,
+          qty: selectedQuantity.value.toString(),
+          prc: selectedOrderType.value === 'LMT' ? limitPrice.value.toString() : "0",
+          prd: selectedProductType.value,
+          trantype: getTransactionType('BUY'),
+          prctyp: selectedOrderType.value,
+          // Add any additional fields required by Shoonya
+        };
+        endpoint = `${BASE_URL}/shoonyaGetOrderMargin`;
+      }
+
+      const jData = JSON.stringify(orderData);
+      const payload = `jKey=${API_TOKEN}&jData=${jData}`;
+
+      const response = await axios.post(endpoint, payload, {
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+
+      if (response.data.stat === 'Ok') {
+        console.log(`Order margin for ${type}:`, response.data);
+        return response.data.marginused;
+      } else {
+        throw new Error(response.data.emsg || `Failed to get order margin for ${type}`);
+      }
+    };
+
+    // Get margins for both call and put
+    const [callMargin, putMargin] = await Promise.all([
+      getMarginForStrike(selectedCallStrike.value, 'call'),
+      getMarginForStrike(selectedPutStrike.value, 'put')
+    ]);
+
+    orderMargin.call = callMargin;
+    orderMargin.put = putMargin;
+
+  } catch (error) {
+    console.error('Error getting order margin:', error);
+    toastMessage.value = 'Failed to get order margin';
+    showToast.value = true;
+    orderMargin.call = null;
+    orderMargin.put = null;
   }
 };
 const placeOrder = async (transactionType, drvOptionType) => {
@@ -1920,6 +2031,15 @@ const placeBasketOrder = async (order) => {
 
     console.log(`Placed basket order for ${order.tradingSymbol}`);
     console.log("Basket order placed successfully:", response.data);
+
+    // Add a delay before fetching updated data
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Update both orders and positions
+    await updateOrdersAndPositions();
+
+    // Update fund limits
+    await updateFundLimits();
 
     return true;
   } catch (error) {
@@ -2566,6 +2686,7 @@ const subscribeToOptions = () => {
       socket.value.send(JSON.stringify(data));
       currentSubscriptions.value.callOption = defaultCallSecurityId.value;
       currentSubscriptions.value.putOption = defaultPutSecurityId.value;
+      getOrderMargin();
     }
 
     if (additionalSymbols.value) {
@@ -2821,7 +2942,218 @@ const validateAndPlaceOrder = () => {
     // The modal will be dismissed automatically due to the data-bs-dismiss attribute
   }
 };
+const checkAndShowAdaptabilityGuide = () => {
+  const lastShownDate = localStorage.getItem('adaptabilityGuideLastShown');
+  const today = new Date().toDateString();
 
+  if (lastShownDate !== today) {
+    // Trigger the modal
+    const showButton = document.getElementById('showAdaptabilityGuideBtn');
+    if (showButton) {
+      showButton.click();
+    }
+
+    // Update the last shown date
+    localStorage.setItem('adaptabilityGuideLastShown', today);
+  }
+};
+const handleOrderTypeChange = () => {
+  console.log('Order Type Changed:', selectedOrderType.value);
+
+  switch (selectedOrderType.value) {
+    case 'MKT':
+      limitPrice.value = null;
+      break;
+    case 'LMT':
+      if (!limitPrice.value) {
+        limitPrice.value = getCurrentLTP();
+      }
+      break;
+    case 'LMT_LTP':
+      limitPrice.value = getCurrentLTP();
+      break;
+    case 'LMT_OFFSET':
+      limitPrice.value = getCurrentLTP() + limitOffset.value;
+      break;
+    case 'MKT_PROTECTION':
+      limitPrice.value = getCurrentLTP() * 1.01;
+      break;
+    default:
+      limitPrice.value = null;
+      break;
+  }
+};
+const getCurrentLTP = () => {
+  return modalOptionType.value === 'CALL' ? parseFloat(latestCallLTP.value) : parseFloat(latestPutLTP.value);
+};
+const setStoploss = (position, type) => {
+  if (!enableStoploss.value) {
+    console.log('Stoploss is disabled.');
+    return;
+  }
+  const quantity = Math.abs(Number(position.netQty || position.netqty));
+
+  if (quantity === 0) {
+    console.log(`Quantity is zero for ${position.tsym}, no stoploss will be set.`);
+    return;
+  }
+
+  const ltp = positionLTPs.value[position.tsym];
+  const isLongPosition = position.netqty > 0;
+  if (type === 'trailing') {
+    trailingStoplosses.value[position.tsym] = isLongPosition
+      ? ltp - stoplossValue.value
+      : ltp + stoplossValue.value;
+    stoplosses.value[position.tsym] = null;
+  } else {
+    stoplosses.value[position.tsym] = isLongPosition
+      ? ltp - stoplossValue.value
+      : ltp + stoplossValue.value;
+    trailingStoplosses.value[position.tsym] = null;
+  }
+  tslHitPositions.delete(position.tsym); // Reset TSL hit tracking
+  console.log(`${type === 'trailing' ? 'TSL' : 'SL'} set for ${position.tsym}: ${isLongPosition ? trailingStoplosses.value[position.tsym] : stoplosses.value[position.tsym]}`);
+};
+const removeStoploss = (position) => {
+  stoplosses.value[position.tsym] = null;
+  trailingStoplosses.value[position.tsym] = null;
+  tslHitPositions.delete(position.tsym); // Reset TSL hit tracking
+};
+const increaseStoploss = (position) => {
+  if (stoplosses.value[position.tsym] !== null) {
+    stoplosses.value[position.tsym] += 1; // Adjust increment value as needed
+  }
+};
+const decreaseStoploss = (position) => {
+  if (stoplosses.value[position.tsym] !== null) {
+    stoplosses.value[position.tsym] -= 1; // Adjust decrement value as needed
+  }
+};
+const setTarget = (position) => {
+  if (!enableTarget.value) {
+    console.log('Target is disabled.');
+    return;
+  }
+  const quantity = Math.abs(Number(position.netQty || position.netqty));
+
+  if (quantity === 0) {
+    console.log(`Quantity is zero for ${position.tsym}, no target will be set.`);
+    return;
+  }
+
+  if (enableTarget.value && targetValue.value > 0) {
+    const ltp = positionLTPs.value[position.tsym];
+
+    // Set target above the LTP for all positions
+    targets.value[position.tsym] = parseFloat(ltp) + parseFloat(targetValue.value);
+
+    console.log(`Target set for ${position.tsym}: LTP = ${ltp}, TargetValue = ${targetValue.value}, Target = ${targets.value[position.tsym]}`);
+  } else {
+    // If target is not enabled or targetValue is not set, remove any existing target
+    targets.value[position.tsym] = null;
+    console.log(`Target removed for ${position.tsym}`);
+  }
+};
+const removeTarget = (position) => {
+  targets.value[position.tsym] = null;
+};
+const increaseTarget = (position) => {
+  if (targets.value[position.tsym] !== null) {
+    targets.value[position.tsym] += 1; // Adjust increment value as needed
+  }
+};
+const decreaseTarget = (position) => {
+  if (targets.value[position.tsym] !== null) {
+    targets.value[position.tsym] -= 1; // Adjust decrement value as needed
+  }
+};
+
+const checkTargets = () => {
+  if (!enableTarget.value) {
+    console.log('Target is disabled.');
+    return;
+  }
+  console.log('Checking targets...');
+  const validTargets = Object.entries(targets.value).filter(([tsym, target]) => target !== null && target !== undefined);
+
+  if (validTargets.length === 0) {
+    console.log('No valid targets set. Skipping check.');
+    return;
+  }
+
+  for (const [tsym, target] of validTargets) {
+    const currentLTP = positionLTPs.value[tsym];
+    console.log(`Checking target for ${tsym}: Current LTP = ${currentLTP}, Target = ${target}`);
+    if (currentLTP >= target) {
+      const position = flatTradePositionBook.value.find(p => p.tsym === tsym);
+      if (position) {
+        console.log(`Target reached for ${tsym}. Placing sell order.`);
+        placeOrderForPosition('S', position.tsym.includes('C') ? 'CALL' : 'PUT', position);
+        removeTarget(position);
+        toastMessage.value = 'Target hit for ' + tsym;
+        showToast.value = true;
+      } else {
+        console.log(`No position found for ${tsym}`);
+      }
+    }
+  }
+};
+const checkStoplosses = () => {
+  if (!enableStoploss.value) {
+    console.log('Stoploss is disabled.');
+    return;
+  }
+  for (const [tsym, sl] of Object.entries(stoplosses.value)) {
+    if (positionLTPs.value[tsym] <= sl) {
+      const position = flatTradePositionBook.value.find(p => p.tsym === tsym);
+      if (position) {
+        placeOrderForPosition('S', position.tsym.includes('C') ? 'CALL' : 'PUT', position);
+        removeStoploss(position);
+        toastMessage.value = 'Stoploss hit for ' + tsym;
+        showToast.value = true;
+      }
+    }
+  }
+  for (const [tsym, tsl] of Object.entries(trailingStoplosses.value)) {
+    const position = flatTradePositionBook.value.find(p => p.tsym === tsym);
+    if (position) {
+      const isLongPosition = position.netqty > 0;
+      const newLTP = positionLTPs.value[tsym];
+
+      if (isLongPosition) {
+        if (newLTP > tsl + stoplossValue.value) {
+          // Update TSL for long positions
+          trailingStoplosses.value[tsym] = newLTP - stoplossValue.value;
+          console.log(`TSL updated for ${tsym}: ${trailingStoplosses.value[tsym]}`);
+        } else if (newLTP <= tsl && !tslHitPositions.has(tsym)) {
+          // Hit TSL for long positions
+          placeOrderForPosition('S', position.tsym.includes('C') ? 'CALL' : 'PUT', position);
+          removeStoploss(position);
+          toastMessage.value = 'Trailing Stoploss hit for ' + tsym;
+          showToast.value = true;
+          tslHitPositions.add(tsym); // Mark TSL as hit
+        }
+      } else {
+        if (newLTP < tsl - stoplossValue.value) {
+          // Update TSL for short positions
+          trailingStoplosses.value[tsym] = newLTP + stoplossValue.value;
+          console.log(`TSL updated for ${tsym}: ${trailingStoplosses.value[tsym]}`);
+        } else if (newLTP >= tsl && !tslHitPositions.has(tsym)) {
+          // Hit TSL for short positions
+          placeOrderForPosition('B', position.tsym.includes('C') ? 'CALL' : 'PUT', position);
+          removeStoploss(position);
+          toastMessage.value = 'Trailing Stoploss hit for ' + tsym;
+          showToast.value = true;
+          tslHitPositions.add(tsym); // Mark TSL as hit
+        }
+      }
+    }
+  }
+};
+const checkStoplossesAndTargets = () => {
+  checkStoplosses();
+  checkTargets();
+};
 
 
 
@@ -2830,6 +3162,7 @@ const validateAndPlaceOrder = () => {
 
 // Lifecycle hooks
 onMounted(async () => {
+  checkAndShowAdaptabilityGuide();
   await checkAllTokens();
   initKillSwitch();
   const storedBroker = localStorage.getItem('selectedBroker');
@@ -3104,6 +3437,7 @@ watch(positionLTPs, (newLTPs, oldLTPs) => {
       }
     }
   });
+  checkStoplossesAndTargets();
 }, { deep: true });
 watch([callStrikeOffset, putStrikeOffset], () => {
   saveOffsets();
