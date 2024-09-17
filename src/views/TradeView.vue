@@ -2413,22 +2413,23 @@ const setPaperTradingCredentials = async () => {
 const connectWebSocket = () => {
   let websocketUrl;
 
-  if (selectedBroker.value?.brokerName === 'Flattrade' && brokerStatus.value === 'Connected') {
-    websocketUrl = 'ws://localhost:8765';
-  } else if (selectedBroker.value?.brokerName === 'Shoonya' && brokerStatus.value === 'Connected') {
-    websocketUrl = 'ws://localhost:8766';
-  } else if (selectedBroker.value?.brokerName === 'PaperTrading' && brokerStatus.value === 'Connected') {
-    // Get the selected broker for paper trading
-    const selectedPaperBroker = JSON.parse(localStorage.getItem('selectedBrokerForPaper') || '{}');
-    if (selectedPaperBroker.brokerName === 'Flattrade') {
-      websocketUrl = 'ws://localhost:8765';
-    } else if (selectedPaperBroker.brokerName === 'Shoonya') {
-      websocketUrl = 'ws://localhost:8766';
-    } else {
-      console.error('Invalid broker selected for paper trading');
-      return;
-    }
-  }
+  // if (selectedBroker.value?.brokerName === 'Flattrade' && brokerStatus.value === 'Connected') {
+  //   websocketUrl = 'ws://localhost:8765';
+  // } else if (selectedBroker.value?.brokerName === 'Shoonya' && brokerStatus.value === 'Connected') {
+  //   websocketUrl = 'ws://localhost:8766';
+  // } else if (selectedBroker.value?.brokerName === 'PaperTrading' && brokerStatus.value === 'Connected') {
+  //   // Get the selected broker for paper trading
+  //   const selectedPaperBroker = JSON.parse(localStorage.getItem('selectedBrokerForPaper') || '{}');
+  //   if (selectedPaperBroker.brokerName === 'Flattrade') {
+  //     websocketUrl = 'ws://localhost:8765';
+  //   } else if (selectedPaperBroker.brokerName === 'Shoonya') {
+  //     websocketUrl = 'ws://localhost:8766';
+  //   } else {
+  //     console.error('Invalid broker selected for paper trading');
+  //     return;
+  //   }
+  // }
+  websocketUrl = 'ws://localhost:8765';
 
   console.log(`Connecting to WebSocket at ${websocketUrl}`);
   socket.value = new WebSocket(websocketUrl);
@@ -3155,12 +3156,12 @@ watch([putOpenPrice, putHighPrice, putLowPrice, putClosePrice],
 );
 // Add this in your component's setup or mounted hook
 watch([selectedMasterSymbol, masterLowPrice, masterHighPrice, niftyPrice, bankNiftyPrice, finniftyPrice, midcpniftyPrice, sensexPrice, bankexPrice], () => {
-  console.log('Master Symbol:', selectedMasterSymbol.value);
-  console.log('Low:', masterLowPrice.value);
-  console.log('High:', masterHighPrice.value);
-  console.log('LTP:', getMasterSymbolPrice());
-  console.log('Range Width:', ltpRangeWidth.value);
-  console.log('Marker Position:', ltpMarkerPosition.value);
+  // console.log('Master Symbol:', selectedMasterSymbol.value);
+  // console.log('Low:', masterLowPrice.value);
+  // console.log('High:', masterHighPrice.value);
+  // console.log('LTP:', getMasterSymbolPrice());
+  // console.log('Range Width:', ltpRangeWidth.value);
+  // console.log('Marker Position:', ltpMarkerPosition.value);
 });
 watch(additionalSymbols, (newValue) => {
   localStorage.setItem('additionalSymbols', JSON.stringify(newValue));

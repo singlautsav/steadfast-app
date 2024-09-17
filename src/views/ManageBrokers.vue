@@ -317,68 +317,40 @@ function maskTokenSecret(apiSecret) {
 
 const handleShoonyaLogin = async () => {
   try {
-    const encoder = new TextEncoder();
-
-    // Retrieve Shoonya details from localStorage
-    const shoonyaDetails = JSON.parse(localStorage.getItem('broker_Shoonya') || '{}');
-    const clientId = shoonyaDetails.clientId;
-    const apiKey = shoonyaDetails.apiKey;
-
-    if (!clientId || !apiKey) {
-      throw new Error('Shoonya client ID or API key is missing');
-    }
-
-    // Hash the password
-    const pwdBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(shoonyaBrokerPassword.value));
-    const pwd = Array.from(new Uint8Array(pwdBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Create and hash the appkey
-    const appkeyRaw = `${SHOONYA_CLIENT_ID.value}|${apiKey}`;
-    const appkeyBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(appkeyRaw));
-    const appkey = Array.from(new Uint8Array(appkeyBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    const jData = {
-      apkversion: "1.0.0",
-      uid: SHOONYA_CLIENT_ID.value,
-      pwd: pwd,
-      factor2: shoonyaOneTimePassword.value,
-      vc: `${clientId}_U`,
-      appkey: appkey,
-      imei: "mac",
-      source: "API"
-    };
-
-    const jDataString = JSON.stringify(jData);
-    const payload = `jData=${jDataString}&jKey=${apiKey}`;
-
-    const response = await axios.post('/shoonyaApi/NorenWClientTP/QuickAuth', payload, {
+    const response = await axios.post('http://localhost:3000/api/get-shoonya-token', {}, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/json'
       }
     });
-
-    if (response.data.stat === 'Ok') {
-      SHOONYA_API_TOKEN.value = response.data.susertoken;
-      localStorage.setItem('SHOONYA_API_TOKEN', SHOONYA_API_TOKEN.value);
-      statusMessage.value = 'Shoonya login successful';
-
-      // Clear the form fields
-      shoonyaBrokerUserId.value = '';
-      shoonyaBrokerPassword.value = '';
-      shoonyaOneTimePassword.value = '';
-      // Clear the status message after 5 seconds
-      setTimeout(() => {
-        statusMessage.value = '';
-      }, 5000);
-
-    } else {
-      throw new Error(response.data.emsg || 'Login failed');
-    }
+    
+    SHOONYA_API_TOKEN.value = response.data.token;
+    localStorage.setItem('SHOONYA_API_TOKEN', SHOONYA_API_TOKEN.value);
+    
+    console.log('Shoonya token retrieved successfully:', SHOONYA_API_TOKEN.value);
   } catch (error) {
-    errorMessage.value = `Shoonya login error: ${error.message}`;
-    clearErrorMessage();
+    console.error('Error fetching Shoonya token:', error);
+    // Handle the error appropriately, maybe set an error state or show a notification
   }
 };
+
+const handleFlattradeLogin = async () => {
+  try {
+    const response = await axios.post('http://localhost:3000/api/get-flattrade-token', {}, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    FLATTRADE_API_TOKEN.value = response.data.token;
+    localStorage.setItem('FLATTRADE_API_TOKEN', FLATTRADE_API_TOKEN.value);
+    
+    console.log('Flatttrade token retrieved successfully:', FLATTRADE_API_TOKEN.value);
+  } catch (error) {
+    console.error('Error fetching Shoonya token:', error);
+    // Handle the error appropriately, maybe set an error state or show a notification
+  }
+};
+
 
 const deleteBroker = (broker) => {
   // Remove broker details from localStorage
@@ -464,13 +436,14 @@ const deleteBroker = (broker) => {
             </td>
             <td class="text-center">
               <template v-if="broker.brokerName === 'Shoonya'">
-                <button class="btn btn-outline-primary btn-sm w-75" data-bs-toggle="modal"
-                  data-bs-target="#ShoonyaLogin">
-                  Login
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal" @click="handleShoonyaLogin">
+                  Update Token
                 </button>
               </template>
-              <template v-else-if="broker.brokerName === 'Flattrade'">
-                <a class="link" @click.prevent="generateToken(broker)">Generate Token</a>
+              <template v-if="broker.brokerName === 'Flattrade'">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal" @click="handleFlattradeLogin">
+                  Update Token
+                </button>
               </template>
               <template v-else-if="broker.brokerName === 'PaperTrading'">
                 <select class="form-select form-select-sm w-100" v-model="selectedBrokerForPaper">
